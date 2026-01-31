@@ -7,8 +7,8 @@ visibility control, shadows, and simple time-based animations.
 ---
 
 ## Files
-TextManager.h
-TextManager.cpp
+-TextManager.h
+-TextManager.cpp
 
 
 ---
