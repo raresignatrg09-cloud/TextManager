@@ -19,23 +19,32 @@ visibility control, shadows, and simple time-based animations.
 - **C++20**
   - Uses `std::unordered_map::contains`
 
+
 ---
 
-## Overview
+## Requirements
 
-Texts are stored internally and accessed by **string IDs**.
+- **SFML** (Graphics module)
+- **C++20**
+  - Uses `std::unordered_map::contains`
 
-Each managed text contains:
-- an `sf::Text`
+---
+
+## Description
+
+Texts are stored and accessed using **string identifiers**.
+
+Each managed text consists of:
+- a main `sf::Text`
 - an optional shadow (`sf::Text`)
 - a visibility flag
-- one active animation (`Fade` or `Scale`)
+- a single active animation (`Fade` or `Scale`)
 
-All texts are rendered using a single `draw()` call.
+All texts are rendered through a single `draw()` call.
 
 ---
 
-## Font Management
+## Font Handling
 
 ### `bool loadFont(const std::string& path)`
 
@@ -46,11 +55,11 @@ Loads a font from file and stores it internally.
 
 ### `void clearFonts()`
 
-Removes all loaded fonts.
+Clears all loaded fonts.
 
 ---
 
-## Text Management
+## Text Handling
 
 ### `void addText(const std::string& id,
                 const std::string& content,
@@ -60,11 +69,11 @@ Removes all loaded fonts.
 Creates a new text entry.
 
 - Does nothing if no font is loaded
-- Uses UTF-8 conversion via `sf::String::fromUtf8`
+- Text is converted from UTF-8 using `sf::String::fromUtf8`
 
 ### `void removeText(const std::string& id)`
 
-Removes a text by its ID.
+Removes a text by ID.
 
 ### `void clearTexts()`
 
@@ -75,67 +84,56 @@ Removes all texts.
 ## Text Properties
 
 ### `void setText(const std::string& id, const std::string& content)`
-
 Updates the text string.
 
 ### `void setPosition(const std::string& id, const sf::Vector2f& position)`
-
 Moves the text.  
-If the text has a shadow, the shadow is moved accordingly.
+If a shadow exists, it is repositioned accordingly.
 
 ### `void setColor(const std::string& id, const sf::Color& color)`
-
 Sets the fill color.
 
 ### `void setOutline(const std::string& id,
                    float thickness,
                    const sf::Color& color)`
-
 Sets outline thickness and color.
 
 ### `void setCharacterSize(const std::string& id, unsigned int size)`
-
-Sets character size.
+Sets the character size.
 
 ### `void setStyle(const std::string& id, sf::Text::Style style)`
-
-Sets SFML text style.
+Sets the SFML text style.
 
 ### `void centerText(const std::string& id, float x, float y)`
-
-Centers the text using its local bounds and moves it to `(x, y)`.  
+Centers the text using its local bounds and positions it at `(x, y)`.  
 If a shadow exists, its origin and position are updated as well.
 
 ### `void setShadow(const std::string& id,
                   const sf::Color& color,
                   const sf::Vector2f& offset)`
-
 Enables a shadow by duplicating the text and applying an offset.
 
 ### `void setVisible(const std::string& id, bool visible)`
-
-Shows or hides a single text.
+Shows or hides a specific text.
 
 ### `void setAllVisible(bool visible)`
-
 Shows or hides all texts.
 
 ### `sf::Text* get(const std::string& id)`
-
-Returns a pointer to the internal `sf::Text`, or `nullptr` if the ID is not found.
+Returns a pointer to the internal `sf::Text`, or `nullptr` if the ID does not exist.
 
 ---
 
 ## Animation System
 
-Each text can have **only one active animation at a time**.
+Each text supports **one active animation at a time**.
 
 Animations are time-based and must be updated every frame.
 
-### Supported Animation Types
+### Supported Animations
 
-- **Fade** – interpolates between two colors
-- **Scale** – interpolates between two scale values
+- **Fade** — interpolates between two colors
+- **Scale** — interpolates between two scale values
 
 ---
 
@@ -147,8 +145,8 @@ Animations are time-based and must be updated every frame.
 
 Starts a fade animation.
 
-- Resets elapsed time
-- Immediately sets the start color
+- Resets animation time
+- Immediately applies the start color
 
 ---
 
@@ -160,8 +158,8 @@ Starts a fade animation.
 
 Starts a scale animation.
 
-- Resets elapsed time
-- Immediately sets the start scale
+- Resets animation time
+- Immediately applies the start scale
 
 ---
 
@@ -169,8 +167,8 @@ Starts a scale animation.
 
 Updates all active animations.
 
-- Must be called every frame
-- `dt` is the frame delta time in seconds
+- Must be called once per frame
+- `dt` is delta time in seconds
 
 ---
 
@@ -187,10 +185,10 @@ Draws all visible texts.
 
 ## Notes
 
-- All texts use the **same font** (the first loaded one)
-- Only one animation per text is supported
+- All texts use the same font (first loaded)
+- Only one animation can run per text
 - Shadows are implemented as duplicated `sf::Text` objects
-- No internal Z-ordering is applied (draw order follows insertion order)
+- No explicit draw ordering or layering is applied
 
 ---
 
