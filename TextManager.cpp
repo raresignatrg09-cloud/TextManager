@@ -1,211 +1,268 @@
 #include "TextManager.h"
 #include <algorithm>
+#include <stdexcept>
 
-// ------------------------
-// Font Management
-// ------------------------
-bool TextManager::loadFont(const std::string& path)
+static uint8_t lerp(uint8_t a, uint8_t b, float t)
+{
+    return static_cast<uint8_t>(a + (b - a) * t);
+}
+
+// ================= FONT =================
+
+bool TextManager::loadFont(std::string_view id, const std::filesystem::path& path)
 {
     sf::Font font;
-    if (!font.loadFromFile(path)) return false;
-    fonts.insert(fonts.begin(), font); // main font first
+    if (!font.openFromFile(path)) 
+        return false;
+    
+	fonts[std::string(id)] = std::move(font);
     return true;
 }
 
-void TextManager::clearFonts() { fonts.clear(); }
+void TextManager::clearFonts() 
+{ 
+    fonts.clear(); 
+}
 
-// ------------------------
-// Text Management
-// ------------------------
-void TextManager::addText(const std::string& id, const std::string& content,
-    unsigned int size, const sf::Vector2f& position)
+// ================= TEXT =================
+
+void TextManager::createText(std::string_view id,
+    std::string_view fontID,
+    std::string_view content,
+    unsigned int size,
+    sf::Vector2f position)
 {
-    if (fonts.empty()) return;
+    auto fontIt = fonts.find(std::string(fontID));
+    if (fontIt == fonts.end())
+        throw std::runtime_error("Font ID not found: " + std::string(fontID));
 
-    ManagedText mt;
-    mt.text.setFont(fonts[0]);
-    mt.text.setCharacterSize(size);
+    texts.emplace(std::string(id),
+        ManagedText(fontIt->second, content, size, position));
+}
+
+void TextManager::removeText(std::string_view id)
+{ 
+    texts.erase(std::string(id)); 
+}
+
+void TextManager::clearTexts() 
+{ 
+    texts.clear(); 
+}
+
+bool TextManager::contains(std::string_view id) const
+{
+    return texts.find(std::string(id)) != texts.end();
+}
+
+// ================= PROPERTIES =================
+
+void TextManager::setString(std::string_view id, std::string_view content)
+{
+    auto& mt = texts.at(std::string(id));
+    mt.text.setString(std::string(content));
+
+    // Keep text centered properly
+    updateAlignment(mt);
+
+    // Update shadow if exists
+    if (mt.shadow)
+        mt.shadow->setString(std::string(content));
+}
+
+void TextManager::setPosition(std::string_view id, sf::Vector2f position)
+{
+    auto& mt = texts.at(std::string(id));
     mt.text.setPosition(position);
-    mt.text.setFillColor(sf::Color::White);
-    mt.text.setString(sf::String::fromUtf8(content.begin(), content.end()));
-    mt.text.setStyle(sf::Text::Regular);
 
-    texts[id] = mt;
+    if (mt.shadow)
+        mt.shadow->setPosition(position + mt.shadowOffset);
 }
 
-void TextManager::removeText(const std::string& id) { texts.erase(id); }
-void TextManager::clearTexts() { texts.clear(); }
-
-// ------------------------
-// Text Properties
-// ------------------------
-void TextManager::setText(const std::string& id, const std::string& content)
+void TextManager::setColor(std::string_view id, sf::Color color)
 {
-    auto it = texts.find(id);
-    if (it != texts.end())
-        it->second.text.setString(sf::String::fromUtf8(content.begin(), content.end()));
+    get(id).setFillColor(color);
 }
 
-void TextManager::setPosition(const std::string& id, const sf::Vector2f& pos)
+void TextManager::setCharacterSize(std::string_view id, unsigned int size)
 {
-    if (texts.contains(id)) {
-        texts[id].text.setPosition(pos);
-        if (texts[id].hasShadow)
-            texts[id].shadow.setPosition(pos + texts[id].shadow.getPosition());
-    }
+    auto& mt = texts.at(std::string(id));
+    mt.text.setCharacterSize(size);
+    updateAlignment(mt);
 }
 
-void TextManager::setColor(const std::string& id, const sf::Color& color)
+void TextManager::setStyle(std::string_view id, sf::Text::Style style)
 {
-    if (texts.contains(id)) texts[id].text.setFillColor(color);
+    get(id).setStyle(style);
 }
 
-void TextManager::setOutline(const std::string& id, float thickness, const sf::Color& color)
+void TextManager::setOutline(std::string_view id, float thickness, sf::Color color)
 {
-    if (texts.contains(id)) {
-        texts[id].text.setOutlineThickness(thickness);
-        texts[id].text.setOutlineColor(color);
-    }
+    auto& mt = get(id);
+    mt.setOutlineThickness(thickness);
+    mt.setOutlineColor(color);
 }
 
-void TextManager::setCharacterSize(const std::string& id, unsigned int size)
+void TextManager::setAlignment(std::string_view id, Alignment alignment)
 {
-    if (texts.contains(id))
-        texts[id].text.setCharacterSize(size);
+    auto& mt = texts.at(std::string(id));
+    mt.alignment = alignment;
+    updateAlignment(mt);
 }
 
-void TextManager::setStyle(const std::string& id, sf::Text::Style style)
+void TextManager::setVisible(std::string_view id, bool visible)
 {
-    if (texts.contains(id))
-        texts[id].text.setStyle(style);
+    texts.at(std::string(id)).visible = visible;
 }
 
-void TextManager::centerText(const std::string& id, float x, float y)
+void TextManager::setShadow(std::string_view id, sf::Color color, sf::Vector2f offset)
 {
-    auto it = texts.find(id);
-    if (it == texts.end()) return;
+    auto& mt = texts.at(std::string(id));
 
-    sf::FloatRect bounds = it->second.text.getLocalBounds();
-    it->second.text.setOrigin(bounds.left + bounds.width / 2.f,
-        bounds.top + bounds.height / 2.f);
-    it->second.text.setPosition(x, y);
+    mt.shadow.emplace(mt.text);
+    mt.shadow->setFillColor(color);
 
-    if (it->second.hasShadow)
-    {
-        it->second.shadow.setOrigin(bounds.left + bounds.width / 2.f,
-            bounds.top + bounds.height / 2.f);
-        it->second.shadow.setPosition(x + it->second.shadow.getPosition().x,
-            y + it->second.shadow.getPosition().y);
-    }
+    mt.shadowOffset = offset;
+    mt.shadow->setPosition(mt.text.getPosition() + offset);
 }
 
-void TextManager::setShadow(const std::string& id, const sf::Color& color, const sf::Vector2f& offset)
-{
-    if (!texts.contains(id)) return;
-    ManagedText& mt = texts[id];
-    mt.hasShadow = true;
-    mt.shadow = mt.text;
-    mt.shadow.setFillColor(color);
-    mt.shadow.move(offset);
-}
+// ================= ANIMATION =================
 
-void TextManager::setVisible(const std::string& id, bool visible)
+void TextManager::animateFade(std::string_view id,
+    sf::Color start,
+    sf::Color end,
+    sf::Time duration,
+    bool loop)
 {
-	if (texts.contains(id))
-	    texts[id].visible = visible;
-}
-
-void TextManager::setAllVisible(bool visible)
-{
-    for (auto& [id, mt] : texts)
-    {
-        mt.visible = visible;
-	}
-}
-
-// ------------------------
-// Animation
-// ------------------------
-void TextManager::animateTextFade(const std::string& id, sf::Color start, sf::Color end,
-    float duration, bool loop)
-{
-    if (!texts.contains(id)) return;
-    ManagedText& mt = texts[id];
-    mt.animation.type = TextAnimation::Type::Fade;
+    auto& mt = texts.at(std::string(id));
+    mt.animation.type = AnimationType::Fade;
     mt.animation.startColor = start;
     mt.animation.endColor = end;
     mt.animation.duration = duration;
-    mt.animation.elapsed = 0.f;
+    mt.animation.elapsed = sf::Time::Zero;
     mt.animation.loop = loop;
+
     mt.text.setFillColor(start);
 }
 
-void TextManager::animateTextScale(const std::string& id, float start, float end,
-    float duration, bool loop)
+void TextManager::animateScale(std::string_view id,
+    float start,
+    float end,
+    sf::Time duration,
+    bool loop)
 {
-    if (!texts.contains(id)) return;
-    ManagedText& mt = texts[id];
-    mt.animation.type = TextAnimation::Type::Scale;
+    auto& mt = texts.at(std::string(id));
+    mt.animation.type = AnimationType::Scale;
     mt.animation.startScale = start;
     mt.animation.endScale = end;
     mt.animation.duration = duration;
-    mt.animation.elapsed = 0.f;
+    mt.animation.elapsed = sf::Time::Zero;
     mt.animation.loop = loop;
-    mt.text.setScale(start, start);
+
+    mt.text.setScale({ start, start });
 }
 
-void TextManager::updateAnimations(float dt)
+void TextManager::update(sf::Time dt)
 {
     for (auto& [id, mt] : texts)
     {
-        if (mt.animation.type == TextAnimation::Type::None) continue;
+        if (mt.animation.type == AnimationType::None)
+            continue;
 
         mt.animation.elapsed += dt;
-        float t = std::min(mt.animation.elapsed / mt.animation.duration, 1.f);
 
-        if (mt.animation.type == TextAnimation::Type::Fade)
+        float t = std::min(
+            mt.animation.elapsed.asSeconds() /
+            mt.animation.duration.asSeconds(),
+            1.f
+        );
+
+        if (mt.animation.type == AnimationType::Fade)
         {
-            sf::Color newColor = mt.animation.startColor + sf::Color(
-                static_cast<sf::Uint8>((mt.animation.endColor.r - mt.animation.startColor.r) * t),
-                static_cast<sf::Uint8>((mt.animation.endColor.g - mt.animation.startColor.g) * t),
-                static_cast<sf::Uint8>((mt.animation.endColor.b - mt.animation.startColor.b) * t),
-                static_cast<sf::Uint8>((mt.animation.endColor.a - mt.animation.startColor.a) * t)
+            sf::Color c(
+                lerp(mt.animation.startColor.r, mt.animation.endColor.r, t),
+                lerp(mt.animation.startColor.g, mt.animation.endColor.g, t),
+                lerp(mt.animation.startColor.b, mt.animation.endColor.b, t),
+                lerp(mt.animation.startColor.a, mt.animation.endColor.a, t)
             );
-            mt.text.setFillColor(newColor);
+
+            mt.text.setFillColor(c);
+            if (mt.shadow)
+                mt.shadow->setFillColor(c);
         }
-        else if (mt.animation.type == TextAnimation::Type::Scale)
+        else if (mt.animation.type == AnimationType::Scale)
         {
-            float scale = mt.animation.startScale + (mt.animation.endScale - mt.animation.startScale) * t;
-            mt.text.setScale(scale, scale);
+            float scale =
+                mt.animation.startScale +
+                (mt.animation.endScale - mt.animation.startScale) * t;
+
+            mt.text.setScale({ scale, scale });
+            if (mt.shadow)
+                mt.shadow->setScale({ scale, scale });
         }
 
         if (t >= 1.f)
         {
             if (mt.animation.loop)
-                mt.animation.elapsed = 0.f;
+                mt.animation.elapsed = sf::Time::Zero;
             else
-                mt.animation.type = TextAnimation::Type::None;
+                mt.animation.type = AnimationType::None;
         }
     }
 }
 
-// ------------------------
-// Drawing
-// ------------------------
-void TextManager::draw(sf::RenderTarget& target)
-{
-    for (auto& [id, mt] : texts)
-    {
-        if (!mt.visible) continue;
+// ================= DRAW =================
 
-        if (mt.hasShadow)
-            target.draw(mt.shadow);
+void TextManager::draw(sf::RenderTarget& target) const
+{
+    for (const auto& [id, mt] : texts)
+    {
+        if (!mt.visible)
+            continue;
+
+        if (mt.shadow)
+            target.draw(*mt.shadow);
+
         target.draw(mt.text);
     }
 }
 
-sf::Text* TextManager::get(const std::string& id)
+// ================= ACCESS =================
+
+sf::Text& TextManager::get(std::string_view id)
 {
-    if (texts.contains(id)) return &texts[id].text;
-    return nullptr;
+    return texts.at(std::string(id)).text;
+}
+
+const sf::Text& TextManager::get(std::string_view id) const
+{
+    return texts.at(std::string(id)).text;
+}
+
+// ================= PRIVATE =================
+
+void TextManager::updateAlignment(ManagedText& mt)
+{
+    auto bounds = mt.text.getLocalBounds();
+
+    switch (mt.alignment)
+    {
+    case Alignment::Left:
+        mt.text.setOrigin({ 0.f, bounds.position.y });
+        break;
+
+    case Alignment::Center:
+        mt.text.setOrigin({
+            bounds.position.x + bounds.size.x / 2.f,
+            bounds.position.y + bounds.size.y / 2.f
+            });
+        break;
+
+    case Alignment::Right:
+        mt.text.setOrigin({
+            bounds.position.x + bounds.size.x,
+            bounds.position.y
+            });
+        break;
+    }
 }
